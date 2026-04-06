@@ -221,7 +221,7 @@ wss.on('connection', (ws) => {
 });
 
 async function performMigration(params, log) {
-    const { sourceHostName, destHostName, destNode, vmid, destVmid, destStorage, bridgeStorage } = params;
+    const { sourceHostName, destHostName, destNode, vmid, destVmid, destStorage, bridgeStorage, startAfterRestore } = params;
     
     log(`Starting migration of LXC ${vmid} from ${sourceHostName} to ${destHostName}`);
     
@@ -317,8 +317,12 @@ async function performMigration(params, log) {
     await waitForTask(dClient, dNode, log, restoreTask);
     
     // 4. Start
-    log(`Starting LXC ${destVmid} on destination...`);
-    await dClient.startLXC(dNode, destVmid);
+    if (startAfterRestore) {
+        log(`Starting LXC ${destVmid} on destination...`);
+        await dClient.startLXC(dNode, destVmid);
+    } else {
+        log(`LXC ${destVmid} will remain STOPPED as requested.`);
+    }
     
     // 5. Verify
     log(`Migration complete. Waiting for verification...`);
