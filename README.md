@@ -1,50 +1,95 @@
-# MIGRA LXC - Proxmox Migration Tool
+# 🛡️ MIGRA LXC: Proxmox Migration Tool
 
-Strumento web per la migrazione di container LXC tra host Proxmox indipendenti usando uno storage NAS/Ponte.
-
-## Funzionalità
-- ✨ **Interfaccia Premium**: Design moderno con Glassmorphism.
-- 🚀 **Real-time Logs**: Visualizzazione avanzamento tramite WebSocket.
-- 💾 **Storage Bridge**: Usa un NAS condiviso (NFS/CIFS) per il passaggio dei file.
-- ✅ **Validazione**: Controllo conflitti ID su host destinazione.
-- 🛡️ **Sicurezza**: Cleanup manuale post-migrazione per prevenire perdite dati in caso di errori.
-
-## Installazione su Ubuntu LXC
-
-1. **Installa Node.js**:
-   ```bash
-   apt update && apt install -y nodejs npm
-   ```
-
-2. **Clona e prepara**:
-   ```bash
-   mkdir -p /migra && cd /migra
-   # (Copia i file del progetto qui)
-   npm install
-   ```
-
-3. **Configurazione**:
-   - I dati degli host sono salvati in `config/hosts.json` (creato al primo avvio).
-   - Accedi alla web app alla porta `8080` per configurare gli host Proxmox (Nome, IP, root@pam, password).
-
-4. **Avvio**:
-   ```bash
-   # Terminale 1 (Backend)
-   node backend/index.js
-   
-   # Terminale 2 (Frontend)
-   node backend/frontend-server.js
-   ```
-
-## Prerequisiti Proxmox
-- Permessi API abilitati (root@pam consigliato o utente con PVEAdmin).
-- Storage condiviso (NAS) visibile ad entrambi gli host Proxmox con lo stesso nome storage.
-- Lo storage destinazione deve essere di tipo compatibile con LXC (ZFS, LVM, etc.).
-
-## Troubleshooting
-- **Errore SSL**: Il tool ignora gli errori SSL dei certificati self-signed di Proxmox.
-- **Porte**: Assicurati che le porte 3001 (API/WS) e 8080 (WEB) siano aperte.
-- **Timeout**: Migrazioni di grandi dimensioni potrebbero richiedere diversi minuti; controlla i log real-time.
+**MIGRA LXC** è uno strumento web-based progettato per migrare container LXC tra nodi Proxmox non in cluster, utilizzando uno storage condiviso (NAS/NFS/CIFS) come ponte temporaneo.
 
 ---
-*Sviluppato con Antigravity per la gestione efficiente dell'infrastruttura Proxmox.*
+
+## 🚀 Funzionalità Principali
+
+-   **Migrazione End-to-End**: Automatizza Stop -> Backup -> Restore -> Start -> Cleanup.
+-   **Supporto API Proxmox**:
+    -   Autenticazione via **Password** (PVE Ticket) o **API Tokens** (PVEAPIToken).
+    -   Gestione multi-host con salvataggio sicuro in `config/hosts.json`.
+-   **Dashboard Intelligente**:
+    -   Suggerimento automatico del **nuovo VMID** (ID libero più basso sul nodo di destinazione).
+    -   Selezione intelligente del nodo: se il cluster ha un solo nodo, viene pre-selezionato e nascosto.
+    -   Lista container LXC filtrata per host sorgente.
+-   **Feedback in Tempo Reale**:
+    -   Avanzamento della migrazione visibile tramite **WebSocket**.
+    -   Barra di caricamento dinamica basata sul progresso reale dei task di Proxmox.
+-   **Interfaccia Moderna**:
+    -   Design "Glassmorphism" reattivo.
+    -   Supporto per **Tema Chiaro / Scuro** con memoria (localStorage).
+    -   Gestione completa Host (CRUD) direttamente dal browser.
+-   **Gestione Servizio**: Script Bash pronti per l'installazione come servizio `systemd`.
+
+---
+
+## 🛠️ Requisiti
+
+1.  **Node.js v18+** installato.
+2.  **Storage condiviso (Bridge)**: Uno storage (es. NFS o CIFS) deve essere visibile e montato con lo stesso nome su tutti i nodi Proxmox (es. `OVM-2TB`).
+3.  **Permessi Proxmox**: L'utente o il token utilizzato devono avere i permessi per `vzdump`, `create`, `delete` e `config` sui nodi interessati.
+
+---
+
+## 📦 Installazione
+
+1.  Clona il repository nella tua cartella preferita (es. `/migra`).
+2.  Installa le dipendenze:
+    ```bash
+    npm install
+    ```
+3.  Crea la cartella di configurazione:
+    ```bash
+    mkdir -p config
+    ```
+
+---
+
+## ⚙️ Gestione come Servizio (Systemd)
+
+Puoi gestire l'app come un servizio di sistema linux utilizzando lo script `manage.sh`:
+
+```bash
+chmod +x manage.sh migra-worker.sh
+
+# Installa il servizio migra.service
+sudo ./manage.sh install
+
+# Abilita l'avvio al boot
+sudo ./manage.sh enable
+
+# Avvia il servizio
+sudo ./manage.sh start
+```
+
+### Comandi disponibili:
+*   `sudo ./manage.sh status`: Controlla lo stato del servizio e i log.
+*   `sudo ./manage.sh stop`: Ferma l'applicazione.
+*   `sudo ./manage.sh restart`: Riavvia backend e frontend.
+
+---
+
+## 🖥️ Utilizzo
+
+1.  Collegati all'indirizzo `http://<tuo-ip-server>:8080`.
+2.  Vai in **Settings** e aggiungi i tuoi Host Proxmox (IP, Utente e API Token o Password). Usa il tasto **TEST CONNESSIONE** per verificare che sia tutto configurato correttamente.
+3.  Ricarica la pagina principale.
+4.  Seleziona l'Host Sorgente. Verranno caricati tutti gli LXC disponibili.
+5.  Seleziona l'Host Destinazione. Il sistema suggerirà automaticamente un ID libero e selezionerà lo storage disponibile.
+6.  Scegli se avviare il container dopo il restore tramite l'apposito checkbox.
+7.  Clicca su **AVVIA MIGRAZIONE** e segui il progresso dal log box.
+8.  Al termine, conferma se desideri cancellare il container originale e il file di backup temporaneo (Cleanup).
+
+---
+
+## 🛡️ Sicurezza
+
+-   Lo strumento utilizza connessioni HTTPS (ignora avvisi certificati self-signed di Proxmox).
+-   Le password sono salvate nel file `config/hosts.json`. Si consiglia l'uso di **API Tokens** con privilegi limitati per una maggiore sicurezza.
+
+---
+
+## 📜 Licenza
+MIT License - Progetto creato per laboratori e ambienti Proxmox.
