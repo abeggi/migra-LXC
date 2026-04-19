@@ -5,8 +5,7 @@
   "type": "module",
   "main": "backend/index.js",
   "scripts": {
-    "start": "node backend/index.js",
-    "frontend": "node backend/frontend-server.js"
+    "start": "node backend/index.js"
   },
   "keywords": [],
   "author": "",

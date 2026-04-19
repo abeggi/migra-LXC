@@ -44,18 +44,6 @@
             --sidebar-w: 280px;
         }
 
-        body.light {
-            --bg:          hsl(220, 25%, 97%);
-            --surface-1:   hsl(0, 0%, 100%);
-            --surface-2:   hsl(220, 20%, 96%);
-            --surface-3:   hsl(220, 15%, 90%);
-            --border:      hsl(220, 15%, 85%);
-            --text:        hsl(220, 25%, 15%);
-            --text-muted:  hsl(220, 10%, 45%);
-            --text-faint:  hsl(220, 8%, 65%);
-            --shadow-card: 0 1px 3px rgba(0,0,0,.08), 0 8px 32px rgba(0,0,0,.08);
-        }
-
         /* ─── Reset & Base ──────────────────────────────────────── */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1203,9 +1191,6 @@
                     <button class="stab active" data-tab="hosts" onclick="switchTab('hosts', this)">
                         🖥️ Host Proxmox
                     </button>
-                    <button class="stab" data-tab="appearance" onclick="switchTab('appearance', this)">
-                        🎨 Aspetto
-                    </button>
                     <button class="stab" data-tab="about" onclick="switchTab('about', this)">
                         ℹ️ Info
                     </button>
@@ -1281,18 +1266,6 @@
                     </div>
                 </div>
 
-                <!-- Tab: Appearance ── -->
-                <div class="stab-panel" id="tab-appearance">
-                    <div class="appearance-row">
-                        <div>
-                            <div class="appearance-label">Tema Interfaccia</div>
-                            <div class="appearance-desc">Scegli tra modalità chiara e scura</div>
-                        </div>
-                        <button class="btn btn-ghost" onclick="toggleTheme()" id="theme-btn" style="min-width:80px">
-                            🌙 Scuro
-                        </button>
-                    </div>
-                </div>
 
                 <!-- Tab: About ── -->
                 <div class="stab-panel" id="tab-about">
@@ -1329,31 +1302,7 @@
 
         /* ─── Init ─────────────────────────── */
         async function init() {
-            initTheme();
             await loadHosts();
-        }
-
-        /* ─── Theme ────────────────────────── */
-        function initTheme() {
-            const saved = localStorage.getItem('theme');
-            if (saved === 'light') {
-                document.body.classList.add('light');
-            }
-            updateThemeButton();
-        }
-
-        function toggleTheme() {
-            document.body.classList.toggle('light');
-            const isLight = document.body.classList.contains('light');
-            localStorage.setItem('theme', isLight ? 'light' : 'dark');
-            updateThemeButton();
-        }
-
-        function updateThemeButton() {
-            const btn = document.getElementById('theme-btn');
-            if (!btn) return;
-            const isLight = document.body.classList.contains('light');
-            btn.textContent = isLight ? '🌙 Scuro' : '☀️ Chiaro';
         }
 
         /* ─── Settings Modal ───────────────── */

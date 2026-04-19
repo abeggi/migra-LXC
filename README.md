@@ -20,8 +20,7 @@
     -   Avanzamento della migrazione visibile tramite **WebSocket**.
     -   Barra di caricamento dinamica basata sul progresso reale dei task di Proxmox.
 -   **Interfaccia Moderna**:
-    -   Design "Glassmorphism" reattivo.
-    -   Supporto per **Tema Chiaro / Scuro** con memoria (localStorage).
+    -   Design "Glassmorphism" professionale e reattivo.
     -   Gestione completa Host (CRUD) direttamente dal browser.
 -   **Gestione Servizio**: Script Bash pronti per l'installazione come servizio `systemd`.
 
