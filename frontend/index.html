@@ -4,404 +4,1330 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Proxmox LXC Migrator</title>
+    <title>Migra LXC · Proxmox Migration Tool</title>
+    <meta name="description" content="Professional Proxmox LXC container migration tool between non-clustered nodes.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        /* ─── Design Tokens ─────────────────────────────────────── */
         :root {
-            --primary: #6366f1;
-            --primary-hover: #4f46e5;
-            --bg: #0f172a;
-            --card-bg: rgba(30, 41, 59, 0.7);
-            --text: #f1f5f9;
-            --text-muted: #94a3b8;
-            --accent-success: #10b981;
-            --accent-error: #ef4444;
-            --glass: rgba(255, 255, 255, 0.05);
-            --border: rgba(255, 255, 255, 0.1);
+            --hue: 243;
+            --primary:        hsl(var(--hue), 82%, 63%);
+            --primary-deep:   hsl(var(--hue), 72%, 50%);
+            --primary-glow:   hsl(var(--hue), 82%, 63%, 0.25);
+            --secondary:      hsl(270, 70%, 65%);
+            --accent-ok:      hsl(152, 69%, 46%);
+            --accent-warn:    hsl(36, 100%, 60%);
+            --accent-err:     hsl(0, 79%, 62%);
+
+            --bg:             hsl(224, 71%, 4%);
+            --surface-1:      hsl(224, 35%, 9%);
+            --surface-2:      hsl(224, 28%, 13%);
+            --surface-3:      hsl(224, 22%, 18%);
+            --border:         hsl(224, 22%, 22%);
+            --border-focus:   hsl(var(--hue), 82%, 63%);
+
+            --text:           hsl(214, 32%, 95%);
+            --text-muted:     hsl(214, 15%, 55%);
+            --text-faint:     hsl(214, 10%, 38%);
+
+            --radius-s:  0.5rem;
+            --radius-m:  0.75rem;
+            --radius-l:  1.25rem;
+            --radius-xl: 1.75rem;
+
+            --shadow-card:    0 1px 3px rgba(0,0,0,.4), 0 8px 32px rgba(0,0,0,.45);
+            --shadow-glow:    0 0 0 3px var(--primary-glow);
+            --transition:     all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+            --sidebar-w: 280px;
         }
 
         body.light {
-            --bg: #f8fafc;
-            --card-bg: rgba(255, 255, 255, 0.8);
-            --text: #1e293b;
-            --text-muted: #64748b;
-            --glass: rgba(0, 0, 0, 0.03);
-            --border: rgba(0, 0, 0, 0.1);
+            --bg:          hsl(220, 25%, 97%);
+            --surface-1:   hsl(0, 0%, 100%);
+            --surface-2:   hsl(220, 20%, 96%);
+            --surface-3:   hsl(220, 15%, 90%);
+            --border:      hsl(220, 15%, 85%);
+            --text:        hsl(220, 25%, 15%);
+            --text-muted:  hsl(220, 10%, 45%);
+            --text-faint:  hsl(220, 8%, 65%);
+            --shadow-card: 0 1px 3px rgba(0,0,0,.08), 0 8px 32px rgba(0,0,0,.08);
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Outfit', sans-serif;
-        }
+        /* ─── Reset & Base ──────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            background-color: var(--bg);
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            background: var(--bg);
             color: var(--text);
             min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
             overflow-x: hidden;
-            transition: background-color 0.3s ease;
+            transition: background 0.3s ease, color 0.3s ease;
         }
 
         body:not(.light) {
-            background: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+            background-image:
+                radial-gradient(ellipse 80% 50% at 20% -10%, hsl(var(--hue), 60%, 18%, 0.4), transparent),
+                radial-gradient(ellipse 60% 40% at 80% 110%, hsl(270, 60%, 18%, 0.3), transparent);
+            background-attachment: fixed;
         }
 
-        nav {
-            width: 100%;
-            padding: 1.5rem 2rem;
+        /* ─── Scrollbar ─────────────────────────────────────────── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+        /* ─── Layout ────────────────────────────────────────────── */
+        .app-shell {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            min-height: 100vh;
+        }
+
+        /* ─── Top Bar ───────────────────────────────────────────── */
+        .topbar {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            backdrop-filter: blur(10px);
+            justify-content: space-between;
+            padding: 0 2rem;
+            height: 60px;
+            background: var(--surface-1);
             border-bottom: 1px solid var(--border);
             position: sticky;
             top: 0;
-            z-index: 100;
+            z-index: 200;
         }
 
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 600;
-            background: linear-gradient(to right, #818cf8, #c084fc);
-            background-clip: text;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .container {
-            max-width: 1000px;
-            width: 90%;
-            padding: 2rem 0;
-        }
-
-        .card {
-            background: var(--card-bg);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border);
-            border-radius: 1.5rem;
-            padding: 2rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            transition: transform 0.3s ease;
-        }
-
-        h2 {
-            margin-bottom: 1.5rem;
-            font-weight: 600;
-            color: #fff;
-        }
-
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5rem;
-        }
-
-        .form-group {
+        .topbar-brand {
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .brand-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-s);
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+            box-shadow: 0 0 16px var(--primary-glow);
+        }
+
+        .brand-name {
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--text);
+        }
+
+        .brand-name span {
+            font-weight: 300;
+            color: var(--text-muted);
+        }
+
+        .topbar-actions {
+            display: flex;
+            align-items: center;
             gap: 0.5rem;
         }
 
-        label {
-            font-size: 0.9rem;
+        /* ─── Main Content ──────────────────────────────────────── */
+        .main-content {
+            max-width: 900px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2rem 1.5rem 4rem;
+        }
+
+        /* ─── Section Heading ───────────────────────────────────── */
+        .section-header {
+            margin-bottom: 1.25rem;
+        }
+
+        .section-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--text);
+            letter-spacing: -0.02em;
+        }
+
+        .section-sub {
+            font-size: 0.8rem;
             color: var(--text-muted);
-            font-weight: 400;
+            margin-top: 0.2rem;
         }
 
-        input,
-        select {
-            background: var(--glass);
+        /* ─── Card ──────────────────────────────────────────────── */
+        .card {
+            background: var(--surface-1);
             border: 1px solid var(--border);
-            border-radius: 0.75rem;
-            padding: 0.75rem 1rem;
+            border-radius: var(--radius-l);
+            padding: 1.75rem;
+            box-shadow: var(--shadow-card);
+            transition: var(--transition);
+        }
+
+        .card + .card { margin-top: 1.25rem; }
+
+        /* ─── Step Indicator ────────────────────────────────────── */
+        .steps-row {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            margin-bottom: 1.75rem;
+            padding: 1rem 1.5rem;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-l);
+            overflow-x: auto;
+        }
+
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-shrink: 0;
+            opacity: 0.35;
+            transition: opacity 0.3s;
+        }
+
+        .step.active { opacity: 1; }
+        .step.done { opacity: 0.7; }
+
+        .step-num {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--surface-3);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .step.active .step-num {
+            background: var(--primary);
+            border-color: var(--primary);
             color: #fff;
+            box-shadow: 0 0 12px var(--primary-glow);
+        }
+
+        .step.done .step-num {
+            background: var(--accent-ok);
+            border-color: var(--accent-ok);
+            color: #fff;
+        }
+
+        .step-label {
+            font-size: 0.78rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .step.active .step-label { color: var(--text); }
+
+        .step-divider {
+            flex: 1;
+            min-width: 24px;
+            height: 1px;
+            background: var(--border);
+            margin: 0 0.5rem;
+        }
+
+        /* ─── Form Controls ─────────────────────────────────────── */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.25rem;
+        }
+
+        .form-grid.g3 { grid-template-columns: repeat(3, 1fr); }
+        .form-grid.g1 { grid-template-columns: 1fr; }
+
+        @media (max-width: 640px) {
+            .form-grid, .form-grid.g3 { grid-template-columns: 1fr; }
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .field.span-2 { grid-column: span 2; }
+        @media (max-width: 640px) { .field.span-2 { grid-column: span 1; } }
+
+        .field-label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .field-label .badge-optional {
+            font-size: 0.65rem;
+            letter-spacing: 0;
+            text-transform: none;
+            color: var(--text-faint);
+            background: var(--surface-3);
+            border-radius: 4px;
+            padding: 0 0.35rem;
+        }
+
+        .input-wrap {
+            position: relative;
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 0.875rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-faint);
+            pointer-events: none;
+            font-size: 0.9rem;
+        }
+
+        input, select {
+            width: 100%;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-m);
+            padding: 0.625rem 0.875rem;
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.875rem;
             outline: none;
-            transition: border-color 0.2s, box-shadow 0.2s;
+            transition: var(--transition);
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .has-icon input,
+        .has-icon select { padding-left: 2.4rem; }
+
+        input::placeholder { color: var(--text-faint); }
+
+        input:hover, select:hover { border-color: var(--text-faint); }
+
+        input:focus, select:focus {
+            border-color: var(--border-focus);
+            box-shadow: var(--shadow-glow);
+        }
+
+        input:disabled, select:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
         }
 
         select {
-            appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
             background-repeat: no-repeat;
-            background-position: right 1rem center;
-            background-size: 1.25rem;
+            background-position: right 0.875rem center;
+            background-size: 1rem;
             padding-right: 2.5rem;
             cursor: pointer;
         }
 
         select option {
-            background-color: #1e293b;
-            color: #fff;
+            background: var(--surface-2);
+            color: var(--text);
         }
 
-        input:focus,
-        select:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-        }
-
-        button {
-            background: linear-gradient(to right, var(--primary), #8b5cf6);
-            color: white;
-            border: none;
-            border-radius: 0.75rem;
-            padding: 0.75rem 1.5rem;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        /* ─── Toggle / Checkbox ─────────────────────────────────── */
+        .toggle-row {
             display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.875rem 1rem;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-m);
+            cursor: pointer;
+            transition: var(--transition);
+            user-select: none;
+        }
+
+        .toggle-row:hover { border-color: var(--text-faint); }
+
+        .toggle-switch {
+            position: relative;
+            width: 38px;
+            height: 22px;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+
+        .toggle-track {
+            position: absolute;
+            inset: 0;
+            background: var(--surface-3);
+            border-radius: 99px;
+            border: 1px solid var(--border);
+            transition: var(--transition);
+        }
+
+        .toggle-track::after {
+            content: '';
+            position: absolute;
+            left: 3px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--text-faint);
+            transition: var(--transition);
+        }
+
+        .toggle-switch input:checked + .toggle-track {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .toggle-switch input:checked + .toggle-track::after {
+            left: calc(100% - 17px);
+            background: #fff;
+        }
+
+        .toggle-info { flex: 1; }
+        .toggle-title { font-size: 0.875rem; font-weight: 500; color: var(--text); }
+        .toggle-desc { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.1rem; }
+
+        /* ─── Buttons ───────────────────────────────────────────── */
+        .btn {
+            display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
+            border: none;
+            border-radius: var(--radius-m);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.875rem;
+            font-weight: 600;
+            padding: 0.625rem 1.25rem;
+            cursor: pointer;
+            transition: var(--transition);
+            white-space: nowrap;
+            line-height: 1;
+            text-decoration: none;
         }
 
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
-            filter: brightness(1.1);
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: #fff;
+            box-shadow: 0 1px 2px rgba(0,0,0,.2);
         }
 
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px var(--primary-glow), 0 0 0 1px var(--primary);
         }
 
-        .log-container {
-            background: #000;
-            border-radius: 1rem;
-            padding: 1.5rem;
-            height: 300px;
-            overflow-y: auto;
-            font-family: 'JetBrains Mono', 'Courier New', monospace;
-            font-size: 0.85rem;
-            color: #10b981;
+        .btn-ghost {
+            background: var(--surface-2);
+            color: var(--text-muted);
             border: 1px solid var(--border);
         }
 
-        .log-entry {
-            margin-bottom: 0.4rem;
+        .btn-ghost:hover:not(:disabled) {
+            background: var(--surface-3);
+            color: var(--text);
+            border-color: var(--text-faint);
         }
 
-        .log-time {
-            color: var(--text-muted);
-            margin-right: 0.5rem;
+        .btn-danger {
+            background: hsl(0, 60%, 20%);
+            color: var(--accent-err);
+            border: 1px solid hsl(0, 40%, 30%);
         }
 
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: var(--glass);
-            border-radius: 4px;
-            overflow: hidden;
-            margin-top: 1rem;
+        .btn-danger:hover:not(:disabled) {
+            background: hsl(0, 60%, 25%);
         }
 
-        .progress-inner {
-            height: 100%;
-            background: linear-gradient(to right, #10b981, #34d399);
-            width: 0%;
-            transition: width 0.5s ease;
+        .btn-success {
+            background: hsl(152, 55%, 16%);
+            color: var(--accent-ok);
+            border: 1px solid hsl(152, 40%, 25%);
         }
 
-        .status-badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 1rem;
-            font-size: 0.75rem;
-            font-weight: 600;
+        .btn-success:hover:not(:disabled) {
+            background: hsl(152, 55%, 20%);
         }
 
-        .status-running {
-            background: rgba(16, 185, 129, 0.2);
-            color: #10b981;
+        .btn-icon {
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            border-radius: var(--radius-m);
         }
 
-        .status-stopped {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
+        .btn-lg {
+            height: 48px;
+            font-size: 0.9rem;
+            padding: 0 2rem;
+            border-radius: var(--radius-m);
+            letter-spacing: 0.02em;
         }
 
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            display: none;
-            justify-content: center;
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .btn-full { width: 100%; }
+
+        /* ─── Status Badge ──────────────────────────────────────── */
+        .badge {
+            display: inline-flex;
             align-items: center;
-            z-index: 1000;
-            backdrop-filter: blur(5px);
+            gap: 0.4rem;
+            padding: 0.25rem 0.65rem;
+            border-radius: 99px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
         }
 
-        .modal.active {
+        .badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            flex-shrink: 0;
+        }
+
+        .badge-running {
+            background: hsl(152, 69%, 46%, 0.15);
+            color: var(--accent-ok);
+            border: 1px solid hsl(152, 69%, 46%, 0.3);
+        }
+
+        .badge-running::before { animation: pulse-dot 1.5s ease-in-out infinite; }
+
+        .badge-done {
+            background: hsl(var(--hue), 82%, 63%, 0.15);
+            color: var(--primary);
+            border: 1px solid var(--primary-glow);
+        }
+
+        .badge-error {
+            background: hsl(0, 79%, 62%, 0.12);
+            color: var(--accent-err);
+            border: 1px solid hsl(0, 79%, 62%, 0.25);
+        }
+
+        .badge-idle {
+            background: var(--surface-3);
+            color: var(--text-faint);
+            border: 1px solid var(--border);
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ─── Progress Bar ──────────────────────────────────────── */
+        .prog-wrap {
+            position: relative;
+            height: 4px;
+            background: var(--surface-3);
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        .prog-fill {
+            position: absolute;
+            inset: 0 auto 0 0;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            border-radius: 99px;
+            width: 0%;
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 0 8px var(--primary-glow);
+        }
+
+        /* ─── Terminal Log ──────────────────────────────────────── */
+        .terminal {
+            background: hsl(220, 40%, 4%);
+            border: 1px solid hsl(220, 20%, 12%);
+            border-radius: var(--radius-m);
+            overflow: hidden;
+        }
+
+        .terminal-bar {
             display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1rem;
+            background: hsl(220, 30%, 7%);
+            border-bottom: 1px solid hsl(220, 20%, 12%);
         }
 
-        /* Animation for migration */
-        @keyframes pulse {
-            0% {
-                transform: scale(1);
-                opacity: 0.5;
-            }
-
-            50% {
-                transform: scale(1.05);
-                opacity: 0.8;
-            }
-
-            100% {
-                transform: scale(1);
-                opacity: 0.5;
-            }
+        .terminal-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
         }
 
-        .migrating-icon {
-            font-size: 3rem;
-            animation: pulse 2s infinite;
+        .terminal-dot:nth-child(1) { background: hsl(0,79%,62%); }
+        .terminal-dot:nth-child(2) { background: hsl(36,100%,60%); }
+        .terminal-dot:nth-child(3) { background: hsl(152,69%,46%); }
+
+        .terminal-title {
+            font-size: 0.72rem;
+            color: hsl(220, 15%, 45%);
+            font-family: 'JetBrains Mono', monospace;
+            margin-left: 0.25rem;
+        }
+
+        .terminal-body {
+            padding: 1rem 1.25rem;
+            height: 280px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            line-height: 1.8;
+            color: hsl(152, 80%, 70%);
+        }
+
+        .log-line { display: flex; gap: 0.75rem; }
+        .log-time { color: hsl(220, 15%, 38%); flex-shrink: 0; }
+        .log-msg { color: hsl(152, 80%, 75%); }
+        .log-msg.err { color: var(--accent-err); }
+        .log-msg.warn { color: var(--accent-warn); }
+
+        /* ─── Divider ───────────────────────────────────────────── */
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 1.5rem 0;
+        }
+
+        /* ─── Cleanup Panel ─────────────────────────────────────── */
+        .cleanup-panel {
+            display: none;
+            padding: 1.25rem;
+            background: hsl(152, 55%, 8%);
+            border: 1px solid hsl(152, 40%, 20%);
+            border-radius: var(--radius-m);
+        }
+
+        .cleanup-panel h4 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--accent-ok);
+            margin-bottom: 0.35rem;
+        }
+
+        .cleanup-panel p {
+            font-size: 0.82rem;
+            color: var(--text-muted);
             margin-bottom: 1rem;
+        }
+
+        .cleanup-actions {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        /* ─── Modal ─────────────────────────────────────────────── */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.65);
+            backdrop-filter: blur(6px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 500;
+            padding: 1rem;
+            animation: fadeIn 0.18s ease;
+        }
+
+        .modal-backdrop.active { display: flex; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+        }
+
+        .modal-panel {
+            background: var(--surface-1);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            width: 100%;
+            max-width: 560px;
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 24px 64px rgba(0,0,0,.6);
+            animation: slideUp 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(24px) scale(0.97); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .modal-header-left {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .modal-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-m);
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .modal-title {
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .modal-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .modal-body {
+            overflow-y: auto;
+            padding: 1.5rem;
+            flex: 1;
+        }
+
+        .modal-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border);
+            gap: 1rem;
+            flex-shrink: 0;
+        }
+
+        /* ─── Settings: Two-panel ───────────────────────────────── */
+        .settings-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.25rem;
+            padding: 0.25rem;
+            background: var(--surface-2);
+            border-radius: var(--radius-m);
+        }
+
+        .stab {
+            flex: 1;
+            padding: 0.45rem 0.5rem;
+            border-radius: calc(var(--radius-m) - 2px);
+            font-size: 0.78rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            background: none;
+            border: none;
+            cursor: pointer;
+            transition: var(--transition);
+            text-align: center;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .stab.active {
+            background: var(--surface-1);
+            color: var(--text);
+            box-shadow: 0 1px 4px rgba(0,0,0,.3);
+        }
+
+        .stab-panel { display: none; }
+        .stab-panel.active { display: block; }
+
+        /* ─── Host Card ─────────────────────────────────────────── */
+        .host-list { display: flex; flex-direction: column; gap: 0.6rem; }
+
+        .host-card {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.875rem 1rem;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-m);
+            transition: var(--transition);
+        }
+
+        .host-card:hover { border-color: var(--text-faint); }
+
+        .host-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-s);
+            background: linear-gradient(135deg, var(--primary-deep), var(--secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .host-info { flex: 1; min-width: 0; }
+
+        .host-name {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .host-detail {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .host-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
+
+        /* ─── Host Form ─────────────────────────────────────────── */
+        .form-section-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-faint);
+            margin-bottom: 0.75rem;
+            margin-top: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .form-section-label::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        /* ─── Appearance Panel ──────────────────────────────────── */
+        .appearance-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.875rem 1rem;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-m);
+            margin-bottom: 0.6rem;
+        }
+
+        .appearance-label { font-size: 0.875rem; font-weight: 500; }
+        .appearance-desc { font-size: 0.75rem; color: var(--text-muted); }
+
+        /* ─── Empty State ───────────────────────────────────────── */
+        .empty-state {
+            text-align: center;
+            padding: 2.5rem 1rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon { font-size: 2rem; margin-bottom: 0.75rem; opacity: 0.5; }
+        .empty-state-title { font-size: 0.9rem; font-weight: 600; color: var(--text-muted); }
+        .empty-state-sub { font-size: 0.8rem; color: var(--text-faint); margin-top: 0.25rem; }
+
+        /* ─── Migration Arrow Visual ────────────────────────────── */
+        .migration-visual {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem 1.25rem;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-m);
+            margin-bottom: 1.25rem;
+        }
+
+        .mig-node {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .mig-node-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--text-faint);
+            margin-bottom: 0.2rem;
+        }
+
+        .mig-node-value {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .mig-node-value.empty { color: var(--text-faint); font-weight: 400; }
+
+        .mig-arrow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.2rem;
+            flex-shrink: 0;
+            color: var(--primary);
+        }
+
+        .mig-arrow svg { opacity: 0.8; }
+
+        /* ─── Misc ──────────────────────────────────────────────── */
+        .row { display: flex; align-items: center; gap: 0.75rem; }
+        .row-between { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+        .mt-1 { margin-top: 0.5rem; }
+        .mt-2 { margin-top: 1rem; }
+        .mt-3 { margin-top: 1.5rem; }
+        .gap-1 { gap: 0.5rem; }
+
+        /* ─── Version tag ───────────────────────────────────────── */
+        .version-tag {
+            font-size: 0.7rem;
+            color: var(--text-faint);
+            background: var(--surface-3);
+            border: 1px solid var(--border);
+            border-radius: 99px;
+            padding: 0.1rem 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
         }
     </style>
 </head>
 
 <body>
-    <nav>
-        <div class="logo">MIGRA LXC</div>
-        <div id="nav-actions" style="display: flex; gap: 1rem;">
-            <button onclick="toggleSettings()" style="background: var(--glass); font-size: 0.9rem;">Settings</button>
-        </div>
-    </nav>
+    <div class="app-shell">
 
-    <div class="container" id="main-view">
-        <div class="card">
-            <h2>Nuova Migrazione</h2>
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>Sorgente</label>
-                    <select id="source-host" onchange="loadSourceLxcs()">
-                        <option value="">Seleziona Host...</option>
-                    </select>
+        <!-- ─── Top Bar ────────────────────────────── -->
+        <header class="topbar">
+            <div class="topbar-brand">
+                <div class="brand-icon">
+                    <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="lg1" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                                <stop offset="0%" stop-color="#818cf8"/>
+                                <stop offset="100%" stop-color="#c084fc"/>
+                            </linearGradient>
+                        </defs>
+                        <!-- Top bar (source) -->
+                        <rect x="2" y="7" width="16" height="5" rx="2" fill="url(#lg1)" opacity="0.9"/>
+                        <!-- Bottom bar (source) -->
+                        <rect x="2" y="20" width="16" height="5" rx="2" fill="url(#lg1)" opacity="0.9"/>
+                        <!-- Arrow shaft top -->
+                        <rect x="18" y="9" width="4" height="3" rx="1" fill="url(#lg1)"/>
+                        <!-- Arrow shaft bottom -->
+                        <rect x="18" y="20" width="4" height="3" rx="1" fill="url(#lg1)"/>
+                        <!-- Arrowhead -->
+                        <path d="M21 10.5 L29 16 L21 21.5 Z" fill="url(#lg1)"/>
+                    </svg>
                 </div>
-                <div class="form-group">
-                    <label id="lxc-label">LXC da Migrare</label>
-                    <select id="source-lxc" disabled>
-                        <option value="">Seleziona prima un Host...</option>
-                    </select>
+                <div>
+                    <div class="brand-name">Migra <span>LXC</span></div>
                 </div>
-                <div class="form-group">
-                    <label>Destinazione</label>
-                    <select id="dest-host" onchange="loadDestInfo()">
-                        <option value="">Seleziona Host...</option>
-                    </select>
-                </div>
-                <div class="form-group" id="dest-node-group" style="display: none;">
-                    <label>Nodo Destinazione</label>
-                    <select id="dest-node" disabled onchange="loadDestStorage()">
-                        <option value="">Seleziona Nodo...</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Storage Destinazione</label>
-                    <select id="dest-storage" disabled>
-                        <option value="">Seleziona Storage...</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Storage Ponte (Shared NAS)</label>
-                    <select id="bridge-storage">
-                        <option value="">Automatico...</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label id="vmid-label">Nuovo ID (VMID)</label>
-                    <input type="number" id="dest-vmid" placeholder="Caricamento...">
-                </div>
-                <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.75rem; padding-top: 1.5rem;">
-                    <input type="checkbox" id="auto-start" checked style="width: 20px; height: 20px; cursor: pointer;">
-                    <label for="auto-start" style="cursor: pointer; margin-bottom: 0;">Avvia container dopo il restore</label>
-                </div>
+                <span class="version-tag">v1.0</span>
             </div>
-            <div style="margin-top: 2rem; display: flex; flex-direction: column; gap:1rem;">
-                <button id="start-btn" onclick="startMigration()" style="width: 100%; height: 3.5rem;">AVVIA
-                    MIGRAZIONE</button>
-            </div>
-        </div>
 
-        <div id="migration-status" class="card" style="display: none;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h2>Status Operazione</h2>
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                    <span id="current-op-badge" class="status-badge status-running">IN CORSO</span>
-                </div>
+            <div class="topbar-actions">
+                <button class="btn btn-ghost" id="topbar-settings-btn" onclick="openSettings()">
+                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    Settings
+                </button>
             </div>
-            <div class="progress-bar">
-                <div id="progress" class="progress-inner"></div>
-            </div>
-            <div class="log-container" id="log-box" style="margin-top: 1.5rem;"></div>
+        </header>
 
-            <div id="cleanup-actions"
-                style="display: none; margin-top: 1.5rem; padding: 1rem; border: 1px solid var(--accent-success); border-radius: 1rem; background: rgba(16, 185, 129, 0.1);">
-                <p style="margin-bottom: 1rem;">Migrazione completata con successo! Vuoi procedere con la pulizia
-                    (cancellazione sorgente e backup temporaneo)?</p>
-                <div style="display: flex; gap: 1rem;">
-                    <button onclick="confirmCleanup()" style="background: var(--accent-success);">SÌ, CANCELLA</button>
-                    <button onclick="skipCleanup()" style="background: var(--glass);">NO, MANTIENI TUTTO</button>
+        <!-- ─── Main ───────────────────────────────── -->
+        <main class="main-content">
+
+            <!-- Step progress -->
+            <div class="steps-row" id="steps-row">
+                <div class="step active" id="step-1">
+                    <div class="step-num">1</div>
+                    <div class="step-label">Sorgente</div>
+                </div>
+                <div class="step-divider"></div>
+                <div class="step" id="step-2">
+                    <div class="step-num">2</div>
+                    <div class="step-label">Destinazione</div>
+                </div>
+                <div class="step-divider"></div>
+                <div class="step" id="step-3">
+                    <div class="step-num">3</div>
+                    <div class="step-label">Storage</div>
+                </div>
+                <div class="step-divider"></div>
+                <div class="step" id="step-4">
+                    <div class="step-num">4</div>
+                    <div class="step-label">Migrazione</div>
                 </div>
             </div>
 
-            <div id="log-actions" style="margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1.5rem;">
-                <button id="close-logs-btn" onclick="hideLogs()"
-                    style="background: var(--glass); display: none; width: 100%;">CHIUDI</button>
+            <!-- Migration visual preview -->
+            <div class="migration-visual">
+                <div class="mig-node">
+                    <div class="mig-node-label">Sorgente</div>
+                    <div class="mig-node-value empty" id="vis-source">— nessun host —</div>
+                </div>
+                <div class="mig-arrow">
+                    <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                    <span style="font-size:0.65rem;color:var(--text-faint)">migrate</span>
+                </div>
+                <div class="mig-node" style="text-align:right">
+                    <div class="mig-node-label" style="text-align:right">Destinazione</div>
+                    <div class="mig-node-value empty" id="vis-dest">— nessun host —</div>
+                </div>
             </div>
-        </div>
+
+            <!-- ── Migration Form Card ── -->
+            <div class="card">
+                <div class="row-between" style="margin-bottom:1.25rem">
+                    <div class="section-header" style="margin-bottom:0">
+                        <div class="section-title">Nuova Migrazione</div>
+                        <div class="section-sub">Configura l'operazione di trasferimento LXC</div>
+                    </div>
+                </div>
+
+                <!-- Row 1: Source -->
+                <div style="font-size:0.7rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12h18M3 6h18M3 18h18"/></svg> Step 1 — Sorgente</div>
+                <div class="form-grid" style="margin-bottom:1.25rem">
+                    <div class="field">
+                        <div class="field-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                            Host Sorgente
+                        </div>
+                        <div class="input-wrap">
+                            <select id="source-host" onchange="loadSourceLxcs(); updateVisuals()">
+                                <option value="">Seleziona host...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <div class="field-label" id="lxc-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+                            Container LXC
+                        </div>
+                        <div class="input-wrap">
+                            <select id="source-lxc" disabled>
+                                <option value="">Seleziona prima un host...</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="font-size:0.7rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12h18M3 6h18M3 18h18"/></svg> Step 2 — Destinazione</div>
+                <div class="form-grid" style="margin-bottom:1.25rem">
+                    <div class="field">
+                        <div class="field-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                            Host Destinazione
+                        </div>
+                        <div class="input-wrap">
+                            <select id="dest-host" onchange="loadDestInfo(); updateVisuals()">
+                                <option value="">Seleziona host...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="field" id="dest-node-group" style="display:none">
+                        <div class="field-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
+                            Nodo Destinazione
+                        </div>
+                        <div class="input-wrap">
+                            <select id="dest-node" disabled onchange="loadDestStorage()">
+                                <option value="">Seleziona nodo...</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="font-size:0.7rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12h18M3 6h18M3 18h18"/></svg> Step 3 — Storage & ID</div>
+                <div class="form-grid g3" style="margin-bottom:1.5rem">
+                    <div class="field">
+                        <div class="field-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 8h20v13H2z"/><path d="M2 4h20v4H2z"/><circle cx="5" cy="11" r="0.8" fill="currentColor"/></svg>
+                            Storage Destinazione
+                        </div>
+                        <select id="dest-storage" disabled>
+                            <option value="">Seleziona storage...</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <div class="field-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V6a2 2 0 00-2-2H8a2 2 0 00-2 2v14"/><path d="M2 20h20"/><path d="M14 12v.01"/></svg>
+                            Bridge Storage (NAS)
+                        </div>
+                        <select id="bridge-storage">
+                            <option value="">Automatico...</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <div class="field-label" id="vmid-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 20h10M10 20V7.5L5 12M14 20V7.5l5 4.5"/></svg>
+                            Nuovo VMID
+                        </div>
+                        <input type="number" id="dest-vmid" placeholder="es. 105">
+                    </div>
+                </div>
+
+                <label class="toggle-row" for="auto-start">
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="auto-start" checked>
+                        <span class="toggle-track"></span>
+                    </div>
+                    <div class="toggle-info">
+                        <div class="toggle-title">Avvia container dopo il restore</div>
+                        <div class="toggle-desc">Il container verrà avviato automaticamente al termine della migrazione</div>
+                    </div>
+                </label>
+
+                <div style="margin-top:1.5rem">
+                    <button id="start-btn" class="btn btn-primary btn-lg btn-full" onclick="startMigration()">
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        Avvia Migrazione
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── Migration Status Card ── -->
+            <div id="migration-status" class="card" style="display:none; margin-top:1.25rem">
+                <div class="row-between" style="margin-bottom:1rem">
+                    <div>
+                        <div class="section-title">Log Operazione</div>
+                        <div class="section-sub" id="migration-desc">In esecuzione...</div>
+                    </div>
+                    <span id="current-op-badge" class="badge badge-running">In corso</span>
+                </div>
+
+                <div class="prog-wrap" style="margin-bottom:1.25rem">
+                    <div class="prog-fill" id="progress"></div>
+                </div>
+
+                <div class="terminal">
+                    <div class="terminal-bar">
+                        <span class="terminal-dot"></span>
+                        <span class="terminal-dot"></span>
+                        <span class="terminal-dot"></span>
+                        <span class="terminal-title">migra-lxc — migration log</span>
+                    </div>
+                    <div class="terminal-body" id="log-box"></div>
+                </div>
+
+                <div class="cleanup-panel" id="cleanup-actions" style="margin-top:1.25rem">
+                    <h4>✅ Migrazione completata con successo</h4>
+                    <p>Vuoi procedere con la pulizia? Verranno eliminati il container sorgente e il file di backup temporaneo sul bridge storage.</p>
+                    <div class="cleanup-actions">
+                        <button class="btn btn-success" onclick="confirmCleanup()">
+                            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            Sì, esegui cleanup
+                        </button>
+                        <button class="btn btn-ghost" onclick="skipCleanup()">
+                            Mantieni tutto
+                        </button>
+                    </div>
+                </div>
+
+                <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border); display:flex; justify-content:flex-end;">
+                    <button id="close-logs-btn" class="btn btn-ghost" onclick="hideLogs()" style="display:none">
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                        Nuova migrazione
+                    </button>
+                </div>
+            </div>
+
+        </main>
     </div>
 
-    <!-- Settings Modal -->
-    <div id="settings-modal" class="modal">
-        <div class="card" style="width: 600px; max-height: 90vh; overflow-y: auto;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                <h2 style="margin-bottom: 0;">Gestione Host Proxmox</h2>
-                <button onclick="showHostForm()" style="font-size: 0.8rem; padding: 0.5rem 1rem;">+ NUOVO HOST</button>
-            </div>
-
-            <div id="host-list-view">
-                <div id="host-list"></div>
-                <div
-                    style="margin-top: 2rem; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); padding-top: 1.5rem;">
-                    <div style="display: flex; align-items: center; gap: 0.50rem;">
-                        <span style="font-size: 0.9rem; color: var(--text-muted);">Tema:</span>
-                        <button onclick="toggleTheme()" id="theme-toggle-btn"
-                            style="background: var(--glass); padding: 0.5rem 1rem; font-size: 0.9rem;">Cambia Tema
-                            🌓</button>
+    <!-- ─── Settings Modal ────────────────────── -->
+    <div id="settings-modal" class="modal-backdrop">
+        <div class="modal-panel">
+            <div class="modal-header">
+                <div class="modal-header-left">
+                    <div class="modal-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/>
+                            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+                        </svg>
                     </div>
-                    <button onclick="toggleSettings()" style="background: var(--glass); width: 100px;">CHIUDI</button>
+                    <div>
+                        <div class="modal-title">Impostazioni</div>
+                        <div class="modal-subtitle">Gestione host e preferenze</div>
+                    </div>
                 </div>
+                <button class="btn btn-ghost btn-icon" onclick="closeSettings()" aria-label="Chiudi">
+                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
             </div>
 
-            <div id="host-form-view" style="display: none;">
-                <h3 id="form-title" style="margin-bottom: 1rem;">Aggiungi Nuovo Host</h3>
-                <div class="form-grid" style="grid-template-columns: 1fr; margin-top: 1rem;">
-                    <input type="text" id="new-host-name" placeholder="Nome (es. Cluster-01)">
-                    <input type="text" id="new-host-ip" placeholder="IP / Hostname (es. 10.0.0.50)">
-                    <input type="text" id="new-host-user" placeholder="Username (es. root@pam)">
-                    <input type="password" id="new-host-pass" placeholder="Password (opzionale se usi Token)">
-                    <input type="password" id="new-host-token" placeholder="API Token Secret (es. UUID)">
-                    <button onclick="testConnection()"
-                        style="background: var(--glass); border-color: var(--primary); color: var(--primary); margin-top: 0.5rem; font-size: 0.85rem;">TEST
-                        CONNESSIONE</button>
-                    <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-                        <button id="save-host-btn" onclick="saveHost()" style="flex: 1;">SALVA</button>
-                        <button onclick="hideHostForm()" style="background: var(--glass); flex: 1;">ANNULLA</button>
+            <div class="modal-body">
+                <!-- Tabs -->
+                <div class="settings-tabs">
+                    <button class="stab active" data-tab="hosts" onclick="switchTab('hosts', this)">
+                        🖥️ Host Proxmox
+                    </button>
+                    <button class="stab" data-tab="appearance" onclick="switchTab('appearance', this)">
+                        🎨 Aspetto
+                    </button>
+                    <button class="stab" data-tab="about" onclick="switchTab('about', this)">
+                        ℹ️ Info
+                    </button>
+                </div>
+
+                <!-- Tab: Hosts ── -->
+                <div class="stab-panel active" id="tab-hosts">
+                    <div id="host-list-view">
+                        <div class="row-between" style="margin-bottom:0.875rem">
+                            <div style="font-size:0.78rem;color:var(--text-muted)">Host configurati</div>
+                            <button class="btn btn-primary" style="padding:0.45rem 0.875rem;font-size:0.78rem" onclick="showHostForm()">
+                                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                                Nuovo Host
+                            </button>
+                        </div>
+                        <div class="host-list" id="host-list"></div>
+                    </div>
+
+                    <div id="host-form-view" style="display:none">
+                        <div class="row" style="margin-bottom:1.25rem">
+                            <button class="btn btn-ghost btn-icon" onclick="hideHostForm()" title="Indietro">
+                                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                            </button>
+                            <div>
+                                <div class="section-title" id="form-title" style="font-size:0.9rem">Aggiungi Host</div>
+                                <div class="section-sub">Inserisci i dati di connessione Proxmox</div>
+                            </div>
+                        </div>
+
+                        <div style="font-size:0.7rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem;">Identificazione</div>
+
+                        <div class="form-grid g1" style="gap:.75rem">
+                            <div class="field">
+                                <div class="field-label">Nome Host</div>
+                                <input type="text" id="new-host-name" placeholder="es. Proxmox-Prod">
+                            </div>
+                            <div class="field">
+                                <div class="field-label">Indirizzo IP / Hostname</div>
+                                <input type="text" id="new-host-ip" placeholder="es. 192.168.1.50">
+                            </div>
+                        </div>
+
+                        <div style="font-size:0.7rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);margin-bottom:.75rem;margin-top:1.25rem;display:flex;align-items:center;gap:.5rem;">Autenticazione</div>
+
+                        <div class="form-grid g1" style="gap:.75rem">
+                            <div class="field">
+                                <div class="field-label">Utente</div>
+                                <input type="text" id="new-host-user" placeholder="es. root@pam">
+                            </div>
+                            <div class="field">
+                                <div class="field-label">Password <span class="badge-optional">opzionale</span></div>
+                                <input type="password" id="new-host-pass" placeholder="••••••••">
+                            </div>
+                            <div class="field">
+                                <div class="field-label">API Token Secret <span class="badge-optional">consigliato</span></div>
+                                <input type="password" id="new-host-token" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                            </div>
+                        </div>
+
+                        <div style="margin-top:1.25rem;display:flex;flex-direction:column;gap:.6rem">
+                            <button class="btn btn-ghost btn-full" onclick="testConnection()" id="test-conn-btn">
+                                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                Testa Connessione
+                            </button>
+                            <div style="display:flex;gap:.6rem">
+                                <button id="save-host-btn" class="btn btn-primary" style="flex:1" onclick="saveHost()">
+                                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                                    Salva Host
+                                </button>
+                                <button class="btn btn-ghost" style="flex:1" onclick="hideHostForm()">Annulla</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: Appearance ── -->
+                <div class="stab-panel" id="tab-appearance">
+                    <div class="appearance-row">
+                        <div>
+                            <div class="appearance-label">Tema Interfaccia</div>
+                            <div class="appearance-desc">Scegli tra modalità chiara e scura</div>
+                        </div>
+                        <button class="btn btn-ghost" onclick="toggleTheme()" id="theme-btn" style="min-width:80px">
+                            🌙 Scuro
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tab: About ── -->
+                <div class="stab-panel" id="tab-about">
+                    <div style="text-align:center;padding:1.5rem 1rem">
+                        <div style="font-size:2.5rem;margin-bottom:1rem">🚀</div>
+                        <div style="font-size:1rem;font-weight:700;letter-spacing:-.02em;margin-bottom:.25rem">Migra LXC</div>
+                        <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:1.5rem;font-family:'JetBrains Mono',monospace">v1.0.0 · Proxmox Migration Tool</div>
+                        <div style="font-size:.82rem;color:var(--text-muted);max-width:320px;margin:0 auto;line-height:1.7">
+                            Strumento web-based per migrare container LXC tra nodi Proxmox non in cluster, tramite uno storage bridge condiviso (NFS/CIFS).
+                        </div>
+                    </div>
+                    <div style="padding:.875rem 1rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-m)">
+                        <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text-faint);margin-bottom:.6rem">Flusso operativo</div>
+                        <div style="display:flex;flex-direction:column;gap:.35rem">
+                            <div style="font-size:.8rem;color:var(--text-muted);display:flex;align-items:center;gap:.5rem"><span style="color:var(--primary)">01</span> Stop container sorgente</div>
+                            <div style="font-size:.8rem;color:var(--text-muted);display:flex;align-items:center;gap:.5rem"><span style="color:var(--primary)">02</span> Backup su bridge storage</div>
+                            <div style="font-size:.8rem;color:var(--text-muted);display:flex;align-items:center;gap:.5rem"><span style="color:var(--primary)">03</span> Restore su host destinazione</div>
+                            <div style="font-size:.8rem;color:var(--text-muted);display:flex;align-items:center;gap:.5rem"><span style="color:var(--primary)">04</span> Avvio container (opzionale)</div>
+                            <div style="font-size:.8rem;color:var(--text-muted);display:flex;align-items:center;gap:.5rem"><span style="color:var(--primary)">05</span> Cleanup sorgente e backup</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -412,87 +1338,96 @@
         let ws;
         const API_BASE = `${window.location.origin}/api`;
 
+        /* ─── Init ─────────────────────────── */
         async function init() {
             initTheme();
             await loadHosts();
         }
 
+        /* ─── Theme ────────────────────────── */
         function initTheme() {
-            if (localStorage.getItem('theme') === 'light') {
+            const saved = localStorage.getItem('theme');
+            if (saved === 'light') {
                 document.body.classList.add('light');
             }
+            updateThemeButton();
         }
 
         function toggleTheme() {
             document.body.classList.toggle('light');
-            localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
+            const isLight = document.body.classList.contains('light');
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+            updateThemeButton();
         }
 
-        async function testConnection() {
-            const host = document.getElementById('new-host-ip').value;
-            const user = document.getElementById('new-host-user').value;
-            const password = document.getElementById('new-host-pass').value;
-            const apiToken = document.getElementById('new-host-token').value;
-
-            if (!host || !user || (!password && !apiToken)) {
-                alert('Inserisci IP, utente e password o token per testare');
-                return;
-            }
-
-            const btn = event.target;
-            const originalText = btn.textContent;
-            btn.textContent = 'TEST IN CORSO...';
-            btn.disabled = true;
-
-            try {
-                const res = await fetch(`${API_BASE}/hosts/test`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ host, user, password, apiToken })
-                });
-                const data = await res.json();
-                alert(data.message);
-            } catch (e) {
-                alert('Errore di connessione: ' + e.message);
-            } finally {
-                btn.textContent = originalText;
-                btn.disabled = false;
-            }
+        function updateThemeButton() {
+            const btn = document.getElementById('theme-btn');
+            if (!btn) return;
+            const isLight = document.body.classList.contains('light');
+            btn.textContent = isLight ? '🌙 Scuro' : '☀️ Chiaro';
         }
 
+        /* ─── Settings Modal ───────────────── */
+        function openSettings() {
+            document.getElementById('settings-modal').classList.add('active');
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-modal').classList.remove('active');
+        }
+
+        document.getElementById('settings-modal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('settings-modal')) closeSettings();
+        });
+
+        /* ─── Tabs ─────────────────────────── */
+        function switchTab(tabId, el) {
+            document.querySelectorAll('.stab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.stab-panel').forEach(p => p.classList.remove('active'));
+            el.classList.add('active');
+            document.getElementById('tab-' + tabId).classList.add('active');
+        }
+
+        /* ─── Hosts CRUD ───────────────────── */
         async function loadHosts() {
             const res = await fetch(`${API_BASE}/hosts`);
             const hosts = await res.json();
 
-            // Render selects in main view
-            const selects = ['source-host', 'dest-host'];
-            selects.forEach(id => {
+            ['source-host', 'dest-host'].forEach(id => {
                 const s = document.getElementById(id);
-                const currentVal = s.value;
-                s.innerHTML = '<option value="">Seleziona Host...</option>';
+                const cur = s.value;
+                s.innerHTML = '<option value="">Seleziona host...</option>';
                 hosts.forEach(h => {
                     s.innerHTML += `<option value="${h.name}">${h.name} (${h.host})</option>`;
                 });
-                s.value = currentVal;
+                s.value = cur;
             });
 
-            // Render settings list
-            const hostList = document.getElementById('host-list');
+            const list = document.getElementById('host-list');
             if (hosts.length === 0) {
-                hostList.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 2rem;">Nessun host configurato.</p>';
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🖥️</div>
+                        <div class="empty-state-title">Nessun host configurato</div>
+                        <div class="empty-state-sub">Aggiungi il tuo primo server Proxmox</div>
+                    </div>`;
             } else {
-                hostList.innerHTML = hosts.map(h => `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border: 1px solid var(--border); border-radius: 0.75rem; margin-bottom: 0.75rem;">
-                        <div>
-                            <div style="font-weight: 600;">${h.name}</div>
-                            <div style="font-size: 0.85rem; color: var(--text-muted);">${h.user} @ ${h.host}</div>
+                list.innerHTML = hosts.map(h => `
+                    <div class="host-card">
+                        <div class="host-avatar">🖥️</div>
+                        <div class="host-info">
+                            <div class="host-name">${h.name}</div>
+                            <div class="host-detail">${h.user} @ ${h.host}</div>
                         </div>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <button onclick="editHost('${h.name}')" style="background: var(--glass); padding: 0.4rem 0.8rem; font-size: 0.75rem;">Modifica</button>
-                            <button onclick="deleteHost('${h.name}')" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 0.4rem 0.8rem; font-size: 0.75rem;">Elimina</button>
+                        <div class="host-actions">
+                            <button class="btn btn-ghost btn-icon" onclick="editHost('${h.name}')" title="Modifica">
+                                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            </button>
+                            <button class="btn btn-danger btn-icon" onclick="deleteHost('${h.name}')" title="Elimina">
+                                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                            </button>
                         </div>
-                    </div>
-                `).join('');
+                    </div>`).join('');
             }
         }
 
@@ -500,37 +1435,30 @@
 
         function showHostForm(editName = null) {
             currentEditHost = editName;
-            const title = document.getElementById('form-title');
-            const nameInput = document.getElementById('new-host-name');
-            const ipInput = document.getElementById('new-host-ip');
-            const userInput = document.getElementById('new-host-user');
-            const passInput = document.getElementById('new-host-pass');
-            const tokenInput = document.getElementById('new-host-token');
-
             document.getElementById('host-list-view').style.display = 'none';
             document.getElementById('host-form-view').style.display = 'block';
+            const title = document.getElementById('form-title');
+            const nm = document.getElementById('new-host-name');
 
             if (editName) {
-                title.textContent = `Modifica Host: ${editName}`;
-                nameInput.value = editName;
-                nameInput.disabled = true;
-                // Fetch credentials for edit
+                title.textContent = `Modifica: ${editName}`;
+                nm.value = editName;
+                nm.disabled = true;
                 fetch(`${API_BASE}/hosts/${editName}`)
                     .then(r => r.json())
                     .then(h => {
-                        ipInput.value = h.host;
-                        userInput.value = h.user;
-                        passInput.value = h.password || '';
-                        tokenInput.value = h.apiToken || '';
+                        document.getElementById('new-host-ip').value = h.host;
+                        document.getElementById('new-host-user').value = h.user;
+                        document.getElementById('new-host-pass').value = h.password || '';
+                        document.getElementById('new-host-token').value = h.apiToken || '';
                     });
             } else {
-                title.textContent = 'Aggiungi Nuovo Host';
-                nameInput.value = '';
-                nameInput.disabled = false;
-                ipInput.value = '';
-                userInput.value = '';
-                passInput.value = '';
-                tokenInput.value = '';
+                title.textContent = 'Aggiungi Host';
+                nm.value = ''; nm.disabled = false;
+                document.getElementById('new-host-ip').value = '';
+                document.getElementById('new-host-user').value = '';
+                document.getElementById('new-host-pass').value = '';
+                document.getElementById('new-host-token').value = '';
             }
         }
 
@@ -540,19 +1468,19 @@
         }
 
         async function saveHost() {
-            const name = document.getElementById('new-host-name').value;
-            const host = document.getElementById('new-host-ip').value;
-            const user = document.getElementById('new-host-user').value;
+            const name     = document.getElementById('new-host-name').value.trim();
+            const host     = document.getElementById('new-host-ip').value.trim();
+            const user     = document.getElementById('new-host-user').value.trim();
             const password = document.getElementById('new-host-pass').value;
             const apiToken = document.getElementById('new-host-token').value;
 
             if (!name || !host || !user || (!password && !apiToken)) {
-                alert('Tutti i campi sono richiesti (oppure password o token secret)');
+                alert('Compila tutti i campi (password o token obbligatorio).');
                 return;
             }
 
             const method = currentEditHost ? 'PUT' : 'POST';
-            const url = currentEditHost ? `${API_BASE}/hosts/${currentEditHost}` : `${API_BASE}/hosts`;
+            const url    = currentEditHost ? `${API_BASE}/hosts/${currentEditHost}` : `${API_BASE}/hosts`;
 
             const res = await fetch(url, {
                 method,
@@ -564,42 +1492,68 @@
                 hideHostForm();
                 await loadHosts();
             } else {
-                const data = await res.json();
-                alert(`Errore: ${data.error || 'Operazione fallita'}`);
+                const d = await res.json();
+                alert(`Errore: ${d.error || 'Operazione fallita'}`);
             }
         }
 
         async function deleteHost(name) {
-            if (!confirm(`Sei sicuro di voler eliminare l'host ${name}?`)) return;
+            if (!confirm(`Eliminare l'host "${name}"?`)) return;
             const res = await fetch(`${API_BASE}/hosts/${name}`, { method: 'DELETE' });
             if (res.ok) await loadHosts();
         }
 
-        function editHost(name) {
-            showHostForm(name);
+        function editHost(name) { showHostForm(name); }
+
+        async function testConnection() {
+            const host     = document.getElementById('new-host-ip').value;
+            const user     = document.getElementById('new-host-user').value;
+            const password = document.getElementById('new-host-pass').value;
+            const apiToken = document.getElementById('new-host-token').value;
+
+            if (!host || !user || (!password && !apiToken)) {
+                alert('Inserisci IP, utente e password/token per testare.');
+                return;
+            }
+
+            const btn = document.getElementById('test-conn-btn');
+            btn.textContent = '⏳ Test in corso...';
+            btn.disabled = true;
+
+            try {
+                const res  = await fetch(`${API_BASE}/hosts/test`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host, user, password, apiToken })
+                });
+                const data = await res.json();
+                alert(data.message);
+            } catch (e) {
+                alert('Errore: ' + e.message);
+            } finally {
+                btn.textContent = '✓ Testa Connessione'; // reset  
+                btn.innerHTML = '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Testa Connessione';
+                btn.disabled = false;
+            }
         }
 
+        /* ─── Load LXCs ────────────────────── */
         async function loadSourceLxcs() {
             const host = document.getElementById('source-host').value;
             const lxcSelect = document.getElementById('source-lxc');
-            const lxcLabel = document.getElementById('lxc-label');
 
             if (!host) {
-                lxcSelect.innerHTML = '<option value="">Seleziona prima un Host...</option>';
+                lxcSelect.innerHTML = '<option value="">Seleziona prima un host...</option>';
                 lxcSelect.disabled = true;
                 return;
             }
 
             lxcSelect.disabled = true;
-            lxcSelect.innerHTML = '<option value="">⏳ Caricamento LXC...</option>';
-            lxcLabel.textContent = 'LXC da Migrare';
+            lxcSelect.innerHTML = '<option value="">⏳ Caricamento...</option>';
 
             try {
-                const res = await fetch(`${API_BASE}/proxmox/${host}/lxcs`);
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-                    throw new Error(err.error || `HTTP ${res.status}`);
-                }
+                const res  = await fetch(`${API_BASE}/proxmox/${host}/lxcs`);
+                if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
                 const lxcs = await res.json();
 
                 lxcSelect.innerHTML = '<option value="">Seleziona LXC...</option>';
@@ -607,76 +1561,72 @@
                     lxcSelect.innerHTML = '<option value="">Nessun LXC trovato</option>';
                 } else {
                     lxcs.forEach(l => {
-                        lxcSelect.innerHTML += `<option value="${l.vmid}" data-node="${l.node}">${l.vmid} - ${l.name || 'N/A'} (${l.status})</option>`;
+                        const status = l.status === 'running' ? '▶' : '■';
+                        lxcSelect.innerHTML += `<option value="${l.vmid}" data-node="${l.node}">${status} ${l.vmid} — ${l.name || 'N/A'} (${l.status})</option>`;
                     });
                     lxcSelect.disabled = false;
                 }
             } catch (e) {
-                lxcSelect.innerHTML = `<option value="">❌ Errore: ${e.message}</option>`;
+                lxcSelect.innerHTML = `<option value="">❌ ${e.message}</option>`;
                 lxcSelect.disabled = true;
-                lxcLabel.textContent = `LXC da Migrare ⚠️`;
             }
 
-            // Populate bridge storage
+            // Bridge storage
             const bsSelect = document.getElementById('bridge-storage');
             bsSelect.innerHTML = '<option value="">⏳ Caricamento storage...</option>';
             try {
-                const sres = await fetch(`${API_BASE}/proxmox/${host}/storage`);
+                const sres    = await fetch(`${API_BASE}/proxmox/${host}/storage`);
                 if (!sres.ok) throw new Error(`HTTP ${sres.status}`);
                 const storage = await sres.json();
-                const shared = storage.filter(st => st.shared == 1 || st.type === 'nfs' || st.type === 'cifs');
+                const shared  = storage.filter(st => st.shared == 1 || st.type === 'nfs' || st.type === 'cifs');
                 if (shared.length === 0) {
-                    bsSelect.innerHTML = '<option value="">Nessuno storage condiviso trovato</option>';
+                    bsSelect.innerHTML = '<option value="">Nessuno storage condiviso</option>';
                 } else {
-                    bsSelect.innerHTML = '<option value="">Seleziona Bridge...</option>';
+                    bsSelect.innerHTML = '<option value="">Seleziona bridge...</option>';
                     shared.forEach(st => {
                         bsSelect.innerHTML += `<option value="${st.storage}">${st.storage} (${st.type})</option>`;
                     });
                 }
             } catch (e) {
-                bsSelect.innerHTML = `<option value="">❌ Errore storage: ${e.message}</option>`;
+                bsSelect.innerHTML = `<option value="">❌ Errore: ${e.message}</option>`;
             }
+
+            updateSteps();
         }
 
+        /* ─── Load Dest ────────────────────── */
         async function loadDestInfo() {
-            const host = document.getElementById('dest-host').value;
-            const nodeSelect = document.getElementById('dest-node');
-            const nodeGroup = document.getElementById('dest-node-group');
+            const host        = document.getElementById('dest-host').value;
+            const nodeSelect  = document.getElementById('dest-node');
+            const nodeGroup   = document.getElementById('dest-node-group');
             const storageSelect = document.getElementById('dest-storage');
-            const vmidInput = document.getElementById('dest-vmid');
-            const vmidLabel = document.getElementById('vmid-label');
+            const vmidInput   = document.getElementById('dest-vmid');
 
-            // Reset everything
-            nodeSelect.innerHTML = '<option value="">Seleziona Nodo...</option>';
-            nodeSelect.disabled = true;
+            nodeSelect.innerHTML = '<option value="">Seleziona nodo...</option>';
+            nodeSelect.disabled  = true;
             nodeGroup.style.display = 'none';
-            storageSelect.innerHTML = '<option value="">Seleziona Storage...</option>';
-            storageSelect.disabled = true;
+            storageSelect.innerHTML = '<option value="">Seleziona storage...</option>';
+            storageSelect.disabled  = true;
             vmidInput.value = '';
             vmidInput.placeholder = 'Caricamento...';
-            vmidLabel.textContent = 'Nuovo ID (VMID)';
 
             if (!host) return;
 
-            // 1. Load nodes
             nodeSelect.innerHTML = '<option value="">⏳ Caricamento...</option>';
             try {
-                const res = await fetch(`${API_BASE}/proxmox/${host}/nodes`);
+                const res   = await fetch(`${API_BASE}/proxmox/${host}/nodes`);
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const nodes = await res.json();
 
                 if (nodes.length === 1) {
-                    // Single node: auto-select, keep hidden
                     nodeSelect.innerHTML = `<option value="${nodes[0].node}">${nodes[0].node}</option>`;
-                    nodeSelect.value = nodes[0].node;
-                    nodeSelect.disabled = false;
+                    nodeSelect.value     = nodes[0].node;
+                    nodeSelect.disabled  = false;
                     nodeGroup.style.display = 'none';
-                    // Auto-load storage
                     await loadDestStorage();
                 } else {
-                    // Multi-node: show selector
                     nodeGroup.style.display = 'block';
-                    nodeSelect.innerHTML = '<option value="">Seleziona Nodo...</option>';
+                    nodeSelect.innerHTML    = '<option value="">Seleziona nodo...</option>';
                     nodes.forEach(n => {
                         nodeSelect.innerHTML += `<option value="${n.node}">${n.node} (${n.status || ''})</option>`;
                     });
@@ -684,124 +1634,152 @@
                 }
             } catch (e) {
                 nodeGroup.style.display = 'block';
-                nodeSelect.innerHTML = `<option value="">❌ Errore: ${e.message}</option>`;
-                nodeSelect.disabled = true;
+                nodeSelect.innerHTML    = `<option value="">❌ ${e.message}</option>`;
+                nodeSelect.disabled     = true;
             }
 
-            // 2. Suggest free VMID
+            // Next VMID
             try {
                 const vmRes = await fetch(`${API_BASE}/proxmox/${host}/next-vmid`);
                 if (vmRes.ok) {
                     const data = await vmRes.json();
-                    vmidInput.value = data.vmid;
+                    vmidInput.value       = data.vmid;
                     vmidInput.placeholder = `Suggerito: ${data.vmid}`;
-                    vmidLabel.textContent = `Nuovo ID (VMID) — suggerito: ${data.vmid}`;
-                } else {
-                    vmidInput.placeholder = 'Inserisci manualmente';
+                    document.getElementById('vmid-label').innerHTML = `
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 20h10M10 20V7.5L5 12M14 20V7.5l5 4.5"/></svg>
+                        Nuovo VMID <span style="color:var(--accent-ok);font-weight:600;margin-left:.25rem">${data.vmid} ✓</span>`;
                 }
-            } catch (e) {
-                vmidInput.placeholder = 'Inserisci manualmente';
-            }
+            } catch (_) { vmidInput.placeholder = 'Inserisci manualmente'; }
+
+            updateSteps();
         }
 
         async function loadDestStorage() {
-            const host = document.getElementById('dest-host').value;
-            const node = document.getElementById('dest-node').value;
-            const storageSelect = document.getElementById('dest-storage');
+            const host    = document.getElementById('dest-host').value;
+            const node    = document.getElementById('dest-node').value;
+            const storage = document.getElementById('dest-storage');
 
-            storageSelect.innerHTML = '<option value="">Seleziona Storage...</option>';
-            storageSelect.disabled = true;
-
+            storage.innerHTML = '<option value="">Seleziona storage...</option>';
+            storage.disabled  = true;
             if (!host || !node) return;
 
-            storageSelect.innerHTML = '<option value="">⏳ Caricamento storage...</option>';
+            storage.innerHTML = '<option value="">⏳ Caricamento...</option>';
             try {
                 const res = await fetch(`${API_BASE}/proxmox/${host}/storage?node=${node}`);
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const storage = await res.json();
-                storageSelect.innerHTML = '<option value="">Seleziona Storage...</option>';
-                storage.forEach(st => {
-                    storageSelect.innerHTML += `<option value="${st.storage}">${st.storage} (${st.type})</option>`;
+                const list = await res.json();
+                storage.innerHTML = '<option value="">Seleziona storage...</option>';
+                list.forEach(st => {
+                    storage.innerHTML += `<option value="${st.storage}">${st.storage} (${st.type})</option>`;
                 });
-                storageSelect.disabled = false;
+                storage.disabled = false;
             } catch (e) {
-                storageSelect.innerHTML = `<option value="">❌ Errore: ${e.message}</option>`;
-                storageSelect.disabled = true;
+                storage.innerHTML = `<option value="">❌ ${e.message}</option>`;
             }
+
+            updateSteps();
         }
 
-        function toggleSettings() {
-            document.getElementById('settings-modal').classList.toggle('active');
+        /* ─── Visual sync ──────────────────── */
+        function updateVisuals() {
+            const src  = document.getElementById('source-host').value;
+            const dst  = document.getElementById('dest-host').value;
+            const visS = document.getElementById('vis-source');
+            const visD = document.getElementById('vis-dest');
+
+            if (src) { visS.textContent = src; visS.classList.remove('empty'); }
+            else      { visS.textContent = '— nessun host —'; visS.classList.add('empty'); }
+
+            if (dst) { visD.textContent = dst; visD.classList.remove('empty'); }
+            else      { visD.textContent = '— nessun host —'; visD.classList.add('empty'); }
+
+            updateSteps();
         }
 
+        function updateSteps() {
+            const src  = document.getElementById('source-host').value;
+            const lxc  = document.getElementById('source-lxc').value;
+            const dst  = document.getElementById('dest-host').value;
+            const node = document.getElementById('dest-node').value;
+            const stor = document.getElementById('dest-storage').value;
+
+            const s1 = document.getElementById('step-1');
+            const s2 = document.getElementById('step-2');
+            const s3 = document.getElementById('step-3');
+            const s4 = document.getElementById('step-4');
+
+            s1.className = 'step' + (src && lxc ? ' done' : src ? ' active' : '');
+            s2.className = 'step' + (dst && (node || document.getElementById('dest-node-group').style.display === 'none') ? ' done' : dst ? ' active' : '');
+            s3.className = 'step' + (stor ? ' done' : dst ? ' active' : '');
+            s4.className = 'step' + (src && lxc && dst && stor ? ' active' : '');
+        }
+
+        /* ─── Log ──────────────────────────── */
         function log(msg) {
             if (msg.startsWith('PROGRESS:')) {
-                const percent = msg.split(':')[1];
-                document.getElementById('progress').style.width = `${percent}%`;
+                const pct = msg.split(':')[1];
+                document.getElementById('progress').style.width = `${pct}%`;
                 return;
             }
 
-            const box = document.getElementById('log-box');
-            const time = new Date().toLocaleTimeString();
-            box.innerHTML += `<div class="log-entry"><span class="log-time">[${time}]</span>${msg}</div>`;
-            box.scrollTop = box.scrollHeight;
+            const box  = document.getElementById('log-box');
+            const time = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const isErr = msg.toLowerCase().includes('error') || msg.toLowerCase().includes('fallito') || msg.toLowerCase().includes('failed');
+            const cls  = isErr ? 'err' : '';
+
+            box.innerHTML += `<div class="log-line"><span class="log-time">${time}</span><span class="log-msg ${cls}">${msg}</span></div>`;
+            box.scrollTop  = box.scrollHeight;
 
             if (msg.includes('VERIFY_REQUIRED')) {
                 document.getElementById('cleanup-actions').style.display = 'block';
-                document.getElementById('current-op-badge').textContent = 'COMPLETATO';
-                document.getElementById('current-op-badge').className = 'status-badge status-running';
+                document.getElementById('current-op-badge').className = 'badge badge-done';
+                document.getElementById('current-op-badge').textContent = 'Completata';
+                document.getElementById('migration-desc').textContent = 'Migrazione completata — in attesa di conferma cleanup';
                 document.getElementById('progress').style.width = '100%';
             }
 
             if (msg.includes('Cleanup completed successfully.')) {
-                document.getElementById('current-op-badge').textContent = 'FINITO';
-                document.getElementById('current-op-badge').className = 'status-badge status-stopped';
-                document.getElementById('close-logs-btn').style.display = 'block';
+                document.getElementById('current-op-badge').className = 'badge badge-idle';
+                document.getElementById('current-op-badge').textContent = 'Terminato';
+                document.getElementById('close-logs-btn').style.display = 'inline-flex';
                 document.getElementById('start-btn').disabled = false;
                 if (ws) ws.close();
             }
         }
 
-        function skipCleanup() {
-            document.getElementById('cleanup-actions').style.display = 'none';
-            document.getElementById('current-op-badge').className = 'status-badge status-stopped';
-            document.getElementById('current-op-badge').textContent = 'COMPLETATO';
-            document.getElementById('close-logs-btn').style.display = 'block';
-        }
-
-        function hideLogs() {
-            document.getElementById('migration-status').style.display = 'none';
-            document.getElementById('migration-form').style.display = 'block';
-            // Clear logs for next time
-            document.getElementById('log-box').innerHTML = '';
-            document.getElementById('progress').style.width = '0%';
-            document.getElementById('close-logs-btn').style.display = 'none';
-        }
-
+        /* ─── Migration ────────────────────── */
         function startMigration() {
             const payload = {
-                sourceHostName: document.getElementById('source-host').value,
-                destHostName: document.getElementById('dest-host').value,
-                destNode: document.getElementById('dest-node').value,
-                vmid: document.getElementById('source-lxc').value,
-                destVmid: document.getElementById('dest-vmid').value,
-                destStorage: document.getElementById('dest-storage').value,
-                bridgeStorage: document.getElementById('bridge-storage').value,
+                sourceHostName:   document.getElementById('source-host').value,
+                destHostName:     document.getElementById('dest-host').value,
+                destNode:         document.getElementById('dest-node').value,
+                vmid:             document.getElementById('source-lxc').value,
+                destVmid:         document.getElementById('dest-vmid').value,
+                destStorage:      document.getElementById('dest-storage').value,
+                bridgeStorage:    document.getElementById('bridge-storage').value,
                 startAfterRestore: document.getElementById('auto-start').checked
             };
 
             if (!payload.sourceHostName || !payload.destHostName || !payload.destNode || !payload.vmid || !payload.destVmid || !payload.destStorage || !payload.bridgeStorage) {
-                alert('Tutti i campi sono obbligatori');
+                alert('Tutti i campi sono obbligatori.');
                 return;
             }
 
             document.getElementById('migration-status').style.display = 'block';
             document.getElementById('log-box').innerHTML = '';
             document.getElementById('start-btn').disabled = true;
-            document.getElementById('progress').style.width = '5%';
+            document.getElementById('progress').style.width = '3%';
+            document.getElementById('current-op-badge').className = 'badge badge-running';
+            document.getElementById('current-op-badge').textContent = 'In corso';
+            document.getElementById('migration-desc').textContent =
+                `Migrazione ${payload.vmid} → ${payload.destHostName}`;
+            document.getElementById('cleanup-actions').style.display = 'none';
+            document.getElementById('close-logs-btn').style.display = 'none';
+
+            document.getElementById('migration-status').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}`;
+            const wsUrl    = `${protocol}//${window.location.host}`;
             ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
@@ -812,21 +1790,23 @@
                 const data = JSON.parse(event.data);
                 if (data.type === 'LOG') log(data.payload);
                 if (data.type === 'ERROR') {
-                    log(`<span style="color:red">ERRORE: ${data.message}</span>`);
-                    document.getElementById('current-op-badge').textContent = 'FALLITO';
-                    document.getElementById('current-op-badge').className = 'status-badge status-stopped';
-                    document.getElementById('close-logs-btn').style.display = 'block';
+                    log(`ERRORE: ${data.message}`);
+                    document.getElementById('current-op-badge').className = 'badge badge-error';
+                    document.getElementById('current-op-badge').textContent = 'Fallita';
+                    document.getElementById('migration-desc').textContent = 'Migrazione fallita';
+                    document.getElementById('close-logs-btn').style.display = 'inline-flex';
+                    document.getElementById('start-btn').disabled = false;
                 }
             };
         }
 
         function confirmCleanup() {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                log('Inviando richiesta di cleanup...');
+                log('Avvio cleanup...');
                 ws.send(JSON.stringify({ type: 'CONFIRM_CLEANUP' }));
                 document.getElementById('cleanup-actions').style.display = 'none';
             } else {
-                alert('Connessione WebSocket persa. Impossibile procedere.');
+                alert('Connessione WebSocket persa.');
             }
         }
 
@@ -834,14 +1814,20 @@
             log('Operazione conclusa senza cleanup.');
             if (ws) ws.close();
             document.getElementById('cleanup-actions').style.display = 'none';
-            document.getElementById('current-op-badge').textContent = 'COMPLETATO';
-            document.getElementById('current-op-badge').className = 'status-badge status-stopped';
-            document.getElementById('close-logs-btn').style.display = 'block';
+            document.getElementById('current-op-badge').className   = 'badge badge-done';
+            document.getElementById('current-op-badge').textContent  = 'Completata';
+            document.getElementById('close-logs-btn').style.display  = 'inline-flex';
             document.getElementById('start-btn').disabled = false;
+        }
+
+        function hideLogs() {
+            document.getElementById('migration-status').style.display = 'none';
+            document.getElementById('log-box').innerHTML = '';
+            document.getElementById('progress').style.width = '0%';
+            document.getElementById('close-logs-btn').style.display = 'none';
         }
 
         init();
     </script>
 </body>
-
 </html>
