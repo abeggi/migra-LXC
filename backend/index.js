@@ -57,7 +57,7 @@ app.put('/api/hosts/:name', (req, res) => {
     let hosts = getHosts();
     const index = hosts.findIndex(h => h.name === req.params.name);
     if (index === -1) return res.status(404).send('Host not found');
-    
+
     hosts[index] = { ...hosts[index], host, user, password, apiToken };
     saveHosts(hosts);
     res.json({ name: req.params.name, host, user });
@@ -124,11 +124,11 @@ app.get('/api/proxmox/:hostname/storage', async (req, res) => {
         if (!host) return res.status(404).send('Host not found');
         const client = new ProxmoxClient(host.host, host.user, host.password, host.apiToken);
         await client.authenticate();
-        
+
         const nodeFilter = req.query.node;
         const nodes = await client.getNodes();
         let allStorage = [];
-        
+
         for (const node of nodes) {
             if (nodeFilter && node.node !== nodeFilter) continue;
             const storage = await client.getStorage(node.node);
@@ -169,7 +169,7 @@ app.get('/api/proxmox/:hostname/next-vmid', async (req, res) => {
             try {
                 const vms = await client.axios.get(`/nodes/${node.node}/qemu`);
                 vms.data.data.forEach(v => usedIds.add(Number(v.vmid)));
-            } catch (_) {}
+            } catch (_) { }
         }
         let nextId = 100;
         while (usedIds.has(nextId)) nextId++;
@@ -190,7 +190,7 @@ let lastMigrationInfo = null;
 
 wss.on('connection', (ws) => {
     console.log('Client connected');
-    
+
     ws.on('message', async (message) => {
         const data = JSON.parse(message);
         if (data.type === 'START_MIGRATION') {
@@ -230,19 +230,19 @@ wss.on('connection', (ws) => {
 
 async function performMigration(params, log) {
     const { sourceHostName, destHostName, destNode, vmid, destVmid, destStorage, bridgeStorage, startAfterRestore } = params;
-    
+
     log(`Starting migration of LXC ${vmid} from ${sourceHostName} to ${destHostName}`);
-    
+
     const hosts = getHosts();
     const source = hosts.find(h => h.name === sourceHostName);
     const dest = hosts.find(h => h.name === destHostName);
-    
+
     const sClient = new ProxmoxClient(source.host, source.user, source.password, source.apiToken);
     const dClient = new ProxmoxClient(dest.host, dest.user, dest.password, dest.apiToken);
-    
+
     await sClient.authenticate();
     await dClient.authenticate();
-    
+
     // Find node of LXC
     const sNodes = await sClient.getNodes();
     let sNode;
@@ -253,19 +253,19 @@ async function performMigration(params, log) {
             break;
         }
     }
-    
+
     if (!sNode) throw new Error('Source node not found');
-    
+
     // 1. Stop if running
     const lxcList = await sClient.getLXC(sNode);
     const lxcInfo = lxcList.find(l => l.vmid == vmid);
     const lxcName = lxcInfo.name || `LXC-${vmid}`;
-    
+
     if (lxcInfo.status === 'running') {
         log(`Stopping LXC ${vmid} (${lxcName})...`);
         const stopTask = await sClient.stopLXC(sNode, vmid);
         await waitForTask(sClient, sNode, log, stopTask);
-        
+
         // Wait until status is actually 'stopped'
         log(`Waiting for LXC ${vmid} to reach stopped state...`);
         let currentStatus = 'running';
@@ -281,7 +281,7 @@ async function performMigration(params, log) {
         if (currentStatus !== 'stopped') throw new Error(`LXC ${vmid} failed to stop in time`);
         log(`LXC ${vmid} is now stopped.`);
     }
-    
+
     // 2. Backup to Bridge Storage
     log(`Backing up LXC ${vmid} (${lxcName}) to bridge storage ${bridgeStorage}...`);
     let backupTask;
@@ -298,14 +298,14 @@ async function performMigration(params, log) {
         }
     }
     await waitForTask(sClient, sNode, log, backupTask);
-    
+
     // Find the archive filename
     const contents = await sClient.getStorageContent(sNode, bridgeStorage);
     // Usually the most recent one for this VMID
     const backups = contents
         .filter(c => c.vmid == vmid && (c.content === 'backup' || c.volid.includes('vzdump-lxc')))
         .sort((a, b) => b.ctime - a.ctime);
-    
+
     if (backups.length === 0) throw new Error('Backup file not found in bridge storage');
     const archive = backups[0].volid;
     log(`Backup created: ${archive}`);
@@ -323,7 +323,7 @@ async function performMigration(params, log) {
         throw new Error(`Restore rejected by destination Proxmox: ${pveError}`);
     }
     await waitForTask(dClient, dNode, log, restoreTask);
-    
+
     // 4. Start
     if (startAfterRestore) {
         log(`Starting LXC ${destVmid} on destination...`);
@@ -331,11 +331,11 @@ async function performMigration(params, log) {
     } else {
         log(`LXC ${destVmid} will remain STOPPED as requested.`);
     }
-    
+
     // 5. Verify
     log(`Migration complete. Waiting for verification...`);
     // Basic ping test could be added here if IP is known
-    
+
     const migrationInfo = {
         sourceHostName,
         sourceNode: sNode,
@@ -354,7 +354,7 @@ async function performMigration(params, log) {
 async function performCleanup(info, log) {
     const { sourceHostName, sourceNode, vmid, bridgeStorage, archive } = info;
     log(`Starting cleanup...`);
-    
+
     const hosts = getHosts();
     const source = hosts.find(h => h.name === sourceHostName);
     const sClient = new ProxmoxClient(source.host, source.user, source.password, source.apiToken);
@@ -362,7 +362,7 @@ async function performCleanup(info, log) {
 
     log(`Deleting source LXC ${vmid} from ${sourceHostName}...`);
     await sClient.deleteLXC(sourceNode, vmid);
-    
+
     log(`Deleting backup archive ${archive} from bridge storage ${bridgeStorage}...`);
     await sClient.deleteBackup(sourceNode, bridgeStorage, archive);
 
