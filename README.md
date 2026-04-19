@@ -73,7 +73,7 @@ sudo ./manage.sh start
 
 ## 🖥️ Utilizzo
 
-1.  Collegati all'indirizzo `http://<tuo-ip-server>:8080`.
+1.  Collegati all'indirizzo `http://<tuo-ip-server>:3001`.
 2.  Vai in **Settings** e aggiungi i tuoi Host Proxmox (IP, Utente e API Token o Password). Usa il tasto **TEST CONNESSIONE** per verificare che sia tutto configurato correttamente.
 3.  Ricarica la pagina principale.
 4.  Seleziona l'Host Sorgente. Verranno caricati tutti gli LXC disponibili.
@@ -88,6 +88,16 @@ sudo ./manage.sh start
 
 -   Lo strumento utilizza connessioni HTTPS (ignora avvisi certificati self-signed di Proxmox).
 -   Le password sono salvate nel file `config/hosts.json`. Si consiglia l'uso di **API Tokens** con privilegi limitati per una maggiore sicurezza.
+
+---
+
+## 🌐 Nginx Proxy Manager (NPM) Setup
+
+Se utilizzi **Nginx Proxy Manager**, segui questi passaggi per farlo funzionare correttamente:
+
+1.  **Forward Host/Port**: Inserisci l'IP del server dove gira Migra LXC e la porta `3001`.
+2.  **Websockets Support**: ⚠️ **IMPORTANTE**: Attiva l'interruttore **Websockets Support** nella scheda "Details" della configurazione del Proxy Host.
+3.  **SSL**: Puoi attivare SSL senza problemi. L'app rileverà automaticamente se usare `http/ws` o `https/wss`.
 
 ---
 

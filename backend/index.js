@@ -4,6 +4,10 @@ import { WebSocketServer } from 'ws';
 import fs from 'fs';
 import path from 'path';
 import { ProxmoxClient } from './proxmox.js';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -11,6 +15,10 @@ const CONFIG_PATH = path.join(process.cwd(), 'config', 'hosts.json');
 
 app.use(cors());
 app.use(express.json());
+
+// Serve static frontend
+const frontendPath = path.join(__dirname, '../frontend');
+app.use(express.static(frontendPath));
 
 // Ensure config file exists
 if (!fs.existsSync(CONFIG_PATH)) {

@@ -11,11 +11,5 @@ cleanup() {
 
 trap cleanup SIGINT SIGTERM
 
-echo "Starting Migra Backend..."
-npm run start &
-
-echo "Starting Migra Frontend..."
-npm run frontend &
-
-# Wait for both background processes
-wait
+echo "Starting Migra (Backend + Frontend)..."
+npm run start

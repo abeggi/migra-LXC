@@ -410,7 +410,7 @@
 
     <script>
         let ws;
-        const API_BASE = `http://${window.location.hostname}:3001/api`;
+        const API_BASE = `${window.location.origin}/api`;
 
         async function init() {
             initTheme();
@@ -800,7 +800,8 @@
             document.getElementById('start-btn').disabled = true;
             document.getElementById('progress').style.width = '5%';
 
-            const wsUrl = `ws://${window.location.hostname}:3001`;
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}`;
             ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
