@@ -1,6 +1,0 @@
-
-> migra@1.0.0 frontend
-> node backend/frontend-server.js
-
-Frontend running on http://0.0.0.0:8080
-Killed
