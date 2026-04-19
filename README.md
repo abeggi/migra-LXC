@@ -22,7 +22,7 @@
 -   **Interfaccia Moderna**:
     -   Design "Glassmorphism" professionale e reattivo.
     -   Gestione completa Host (CRUD) direttamente dal browser.
--   **Gestione Servizio**: Script Bash pronti per l'installazione come servizio `systemd`.
+-   **Gestione Servizio**: Gestione completa tramite script `manage.sh`.
 
 ---
 
@@ -53,7 +53,7 @@
 Puoi gestire l'app come un servizio di sistema linux utilizzando lo script `manage.sh`:
 
 ```bash
-chmod +x manage.sh migra-worker.sh
+chmod +x manage.sh
 
 # Installa il servizio migra.service
 sudo ./manage.sh install

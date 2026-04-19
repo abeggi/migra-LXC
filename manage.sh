@@ -22,14 +22,13 @@ After=network.target
 Type=simple
 User=$USER
 WorkingDirectory=$APP_DIR
-ExecStart=/bin/bash $APP_DIR/migra-worker.sh
+ExecStart=/usr/bin/npm start
 Restart=always
 RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
 EOF
-        chmod +x $APP_DIR/migra-worker.sh
         systemctl daemon-reload
         echo "Servizio installato. Ora puoi fare 'enable' o 'start'."
         ;;
