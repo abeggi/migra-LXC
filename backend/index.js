@@ -191,41 +191,56 @@ let lastMigrationInfo = null;
 wss.on('connection', (ws) => {
     console.log('Client connected');
 
-    ws.on('message', async (message) => {
+        // Helper to send message safely
+        const send = (data) => {
+            if (ws.readyState === 1) ws.send(JSON.stringify(data));
+        };
+
         const data = JSON.parse(message);
         if (data.type === 'START_MIGRATION') {
             if (migrationInProgress) {
-                ws.send(JSON.stringify({ type: 'ERROR', message: 'Migration already in progress' }));
+                send({ type: 'ERROR', message: 'Migration already in progress' });
                 return;
             }
             migrationInProgress = true;
             try {
                 lastMigrationInfo = await performMigration(data.payload, (log) => {
-                    ws.send(JSON.stringify({ type: 'LOG', payload: log }));
+                    send({ type: 'LOG', payload: log });
                 });
                 migrationInProgress = false;
             } catch (e) {
-                ws.send(JSON.stringify({ type: 'ERROR', message: e.message }));
+                send({ type: 'ERROR', message: e.message });
                 migrationInProgress = false;
             }
         }
 
         if (data.type === 'CONFIRM_CLEANUP') {
             if (!lastMigrationInfo) {
-                ws.send(JSON.stringify({ type: 'ERROR', message: 'No migration info found for cleanup' }));
+                send({ type: 'ERROR', message: 'No migration info found for cleanup' });
                 return;
             }
             try {
                 await performCleanup(lastMigrationInfo, (log) => {
-                    ws.send(JSON.stringify({ type: 'LOG', payload: log }));
+                    send({ type: 'LOG', payload: log });
                 });
                 lastMigrationInfo = null;
-                ws.send(JSON.stringify({ type: 'LOG', payload: 'Cleanup completed successfully.' }));
+                send({ type: 'LOG', payload: 'Cleanup completed successfully.' });
             } catch (e) {
-                ws.send(JSON.stringify({ type: 'ERROR', message: `Cleanup failed: ${e.message}` }));
+                send({ type: 'ERROR', message: `Cleanup failed: ${e.message}` });
             }
         }
     });
+
+    // Keep-alive ping every 30s
+    const pingInterval = setInterval(() => {
+        if (ws.readyState === 1) {
+            ws.ping();
+        } else {
+            clearInterval(pingInterval);
+        }
+    }, 30000);
+
+    ws.on('close', () => clearInterval(pingInterval));
 });
 
 async function performMigration(params, log) {
@@ -385,6 +400,10 @@ async function waitForTask(client, node, log, upid) {
                     if (match) {
                         log(`PROGRESS:${match[1]}`);
                     }
+                    // Also forward the raw log if it looks interesting (optional, for better visibility)
+                    if (line.includes('transferred') || line.includes('creating') || line.includes('extracting')) {
+                        log(`[PVE] ${line}`);
+                    }
                 }
                 lastLine = taskLogs.length;
 
@@ -395,10 +414,12 @@ async function waitForTask(client, node, log, upid) {
                         reject(new Error(`Task failed: ${status.exitstatus}`));
                     }
                 } else {
-                    setTimeout(check, 2000);
+                    setTimeout(check, 3000);
                 }
             } catch (e) {
-                reject(e);
+                // Ignore transient API errors during long tasks, retry
+                console.error(`Transient error in task polling: ${e.message}`);
+                setTimeout(check, 5000);
             }
         };
         check();
