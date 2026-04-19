@@ -2,6 +2,8 @@
 
 **MIGRA LXC** è uno strumento web-based progettato per migrare container LXC tra nodi Proxmox non in cluster, utilizzando uno storage condiviso (NAS/NFS/CIFS) come ponte temporaneo.
 
+!(screenshot.png)
+
 ---
 
 ## 🚀 Funzionalità Principali
