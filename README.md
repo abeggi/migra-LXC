@@ -103,4 +103,4 @@ Se utilizzi **Nginx Proxy Manager**, segui questi passaggi per farlo funzionare 
 ---
 
 ## 📜 Licenza
-MIT License - Progetto creato per laboratori e ambienti Proxmox.
+GPL3 License - Progetto creato per laboratori e ambienti Proxmox.
