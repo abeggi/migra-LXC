@@ -1759,10 +1759,7 @@
         }
 
         function hideLogs() {
-            document.getElementById('migration-status').style.display = 'none';
-            document.getElementById('log-box').innerHTML = '';
-            document.getElementById('progress').style.width = '0%';
-            document.getElementById('close-logs-btn').style.display = 'none';
+            window.location.reload();
         }
 
         init();

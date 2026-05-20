@@ -191,12 +191,14 @@ let lastMigrationInfo = null;
 wss.on('connection', (ws) => {
     console.log('Client connected');
 
-        // Helper to send message safely
-        const send = (data) => {
-            if (ws.readyState === 1) ws.send(JSON.stringify(data));
-        };
+    // Helper to send message safely
+    const send = (data) => {
+        if (ws.readyState === 1) ws.send(JSON.stringify(data));
+    };
 
+    ws.on('message', async (message) => {
         const data = JSON.parse(message);
+
         if (data.type === 'START_MIGRATION') {
             if (migrationInProgress) {
                 send({ type: 'ERROR', message: 'Migration already in progress' });
@@ -207,6 +209,7 @@ wss.on('connection', (ws) => {
                 lastMigrationInfo = await performMigration(data.payload, (log) => {
                     send({ type: 'LOG', payload: log });
                 });
+                send({ type: 'LOG', payload: 'VERIFY_REQUIRED: Migration successful. Confirm cleanup of source and bridge backup?' });
                 migrationInProgress = false;
             } catch (e) {
                 send({ type: 'ERROR', message: e.message });
